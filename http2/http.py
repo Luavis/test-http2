@@ -41,9 +41,9 @@ class Header(object):
         return '<{name}: {value}>'.format(name=self.name, value=self.value)
 
 
-class HTTPMessage(object):
+class Status(object):
     """
-    HTTPMessage object
+    Status object
     """
 
     REQ = 'req'
@@ -65,7 +65,7 @@ class HTTPMessage(object):
 
     def __repr__(self):
         repr = ''
-        if self.type == HTTPMessage.REQ:
+        if self.type == Status.REQ:
             repr = '<verb: {verb}, path: {path}, version: {version}>'.format(
                 verb=self.verb, path=self.path, version=self.protocol_version)
         else:
