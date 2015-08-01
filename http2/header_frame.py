@@ -75,7 +75,10 @@ class HeaderFrame(Frame):
 
     def add(self, name, value):
 
-        self._header_list.appned((name.lower(), value))
+        self._header_list.append((name.lower(), value))
+
+    def status(self, status):
+        self.add(':status', str(status))
 
     def method(self, method):
 
@@ -111,10 +114,10 @@ class HeaderFrame(Frame):
         if self.is_end_stream:
             flag |= HeaderFrame.END_STREAM_FLAG
 
-        if self.is_padded:
+        if self._is_padded:
             flag |= HeaderFrame.PADDED_FLAG
 
-        if self.is_priority:
+        if self._is_priority:
             flag |= HeaderFrame.PRIORITY_FLAG
 
         return flag
