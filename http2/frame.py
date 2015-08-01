@@ -9,23 +9,100 @@
  |                   Frame Payload (0...)                      ...
  +---------------------------------------------------------------+
 
- Length is minimum size = 2^14
- Length is maximum size = 2^24 - 1
 """
+
+
+class FrameType(object):
+
+    DATA = 0x0
+
+    HEADERS = 0x1
+
+    PRIORITY = 0x2
+
+    RST_STREAM = 0x3
+
+    SETTINGS = 0x4
+
+    PUSH_PROMISE = 0x5
+
+    PING = 0x6
+
+    GOAWAY = 0x7
+
+    WINDOW_UPDATE = 0x8
+
+    CONTINUATION = 0x9
 
 
 class Frame(object):
 
-    FRAME_MIN_SIZE = 16384  # 2 ^ 14
-    FRAME_MAX_SIZE = 16777215  # 2 ^ 24 - 1
+    FRAME_MIN_SIZE = 0
+    FRAME_MAX_SIZE = 16384
 
-    def __init__(self, type=0, flag=0, id=0, data=''):
+    @classmethod
+    def parse_header(cls, frame_header):
+
+        if len(frame_header) < 9:
+            raise ValueError("invalid frame_header length")
+
+        frame_len = frame_header[0] << 16
+        frame_len += frame_header[1] << 8
+        frame_len += frame_header[2]
+
+        frame_type = frame_header[3]  # get frame type
+
+        frame_flag = frame_header[4]  # get frame flag
+
+        frame_id = frame_header[5] << 24
+        frame_id += frame_header[6] << 16
+        frame_id += frame_header[7] << 8
+        frame_id += frame_header[8]
+
+        return (frame_len, frame_type, frame_flag, frame_id)
+
+    @classmethod
+    def load(cls, frame, header=None):
+
+        from http2.setting_frame import SettingFrame
+        from http2.data_frame import DataFrame
+        from http2.header_frame import HeaderFrame
+
+        if header is None:
+            header = cls.parse_header(frame)
+
+        # frame length, type, flag, id
+        frm_len, frm_type, frm_flag, frm_id = header
+
+        frm_cls = None
+
+        # check frame length match real size
+
+        if not frm_len + 9 == len(frame):
+            raise ValueError('frame size is not match')
+
+        if frm_type == FrameType.DATA:
+            frm_cls = DataFrame
+        elif frm_type == FrameType.SETTINGS:
+            frm_cls = SettingFrame
+        elif frm_type == FrameType.HEADERS:
+            frm_cls = HeaderFrame
+        else:
+            raise Exception("Unknown frame type")
+
+        return frm_cls.load(frame, header)
+
+    def __init__(self, type=FrameType.DATA, flag=0, id=0, data=bytearray()):
 
         self._type = type
         self._flag = flag
         self._id_bin = id
 
-        if len(data) > Frame.FRAME_MAX_SIZE:
+        self.max_size = Frame.FRAME_MAX_SIZE
+
+        # pass if  data is None; for lazy set data
+
+        if data is not None and len(data) > Frame.FRAME_MAX_SIZE:
             raise Exception('Data is out of size')
 
         self._data = data
@@ -46,7 +123,7 @@ class Frame(object):
     def type(self):
         return self._type
 
-    @data.setter
+    @type.setter
     def type(self, value):
         if value > 0xFF:
             raise Exception('Type is out of size')
@@ -57,18 +134,11 @@ class Frame(object):
     def flag(self):
         return self._flag
 
-    @data.setter
-    def flag(self, value):
-        if value > 0xFF:
-            raise Exception('Flag is out of size')
-        else:
-            self._flag = value
-
     @property
     def id(self):
         return self._id_bin
 
-    @data.setter
+    @id.setter
     def id(self, value):
         if value > 0xFFFFFFFF or not(value & 0x7FFFFFFF == value):
             raise Exception('ID is invalid')
@@ -99,7 +169,7 @@ class Frame(object):
 
     def _append_length_bin(self, ret_bin):
 
-        len_bin = len(self.data)
+        len_bin = len(self._data)
 
         if len_bin < Frame.FRAME_MIN_SIZE:
             raise Exception("Data size is invalid size")

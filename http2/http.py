@@ -5,8 +5,10 @@
 
 """
 
+class HTTPMessage(object):
+    pass
 
-class Response(object):
+class Response(HTTPMessage):
     """
     Response object
     """
@@ -17,7 +19,7 @@ class Response(object):
         self.content = content
 
 
-class Request(object):
+class Request(HTTPMessage):
     """
     Request object
     """

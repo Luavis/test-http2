@@ -1,0 +1,1 @@
+require('http2').raw.get('http://localhost:8000', function(res){res.on('data', function(data){console.log(data.toString())})})
