@@ -103,9 +103,9 @@ class HeaderFrame(Frame):
 
     def __init__(self, id, end_header=True, end_stream=False):
 
-        self.is_end_stream = end_header
+        self.is_end_stream = end_stream
 
-        self.is_end_header = end_stream
+        self.is_end_header = end_header
 
         self._is_priority = False
 
