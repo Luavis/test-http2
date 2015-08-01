@@ -1,8 +1,8 @@
 """
-    test_util
+    test_settings_frame
     ~~~~~~~~~
 
-    Test util.py
+    Test setting_frame.py
 
 """
 
