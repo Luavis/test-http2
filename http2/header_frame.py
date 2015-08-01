@@ -148,24 +148,45 @@ class HeaderFrame(Frame):
 
         self._header_list.append((name.lower(), value))
 
-    def status(self, status):
-        self.add(':status', str(status))
+    def status(self, status=None):
+        if status is not None:
+            self.add(':status', status)
+        else:
+            for header in self._header_list:
+                if header[0] == ':status':
+                    return header[1]
 
-    def method(self, method):
+    def method(self, method=None):
+        if method is not None:
+            self.add(':method', method)
+        else:
+            for header in self._header_list:
+                if header[0] == ':method':
+                    return header[1]
 
-        self.add(':method', method)
+    def scheme(self, scheme=None):
+        if scheme is not None:
+            self.add(':scheme', scheme)
+        else:
+            for header in self._header_list:
+                if header[0] == ':scheme':
+                    return header[1]
 
-    def scheme(self, scheme):
+    def authority(self, authority=None):
+        if authority is not None:
+            self.add(':authority', authority)
+        else:
+            for header in self._header_list:
+                if header[0] == ':authority':
+                    return header[1]
 
-        self.add(':scheme', scheme)
-
-    def authority(self, authority):
-
-        self.add(':authority', authority)
-
-    def path(self, path):
-
-        self.add(':path', path)
+    def path(self, path=None):
+        if path is not None:
+            self.add(':path', path)
+        else:
+            for header in self._header_list:
+                if header[0] == ':path':
+                    return header[1]
 
     # Remove headers
 
@@ -173,7 +194,7 @@ class HeaderFrame(Frame):
 
         for header in self._header_list:
             if header[0] == name:
-                pass
+                self._header_list.remove(header)
 
     @property
     def flag(self):
