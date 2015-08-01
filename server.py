@@ -7,8 +7,10 @@
 import socket
 from threading import Thread
 import ssl
+from http2.setting_frame import SettingFrame
+from http2.frame import Frame
 
-PREFACE_CODE = "\x50\x52\x49\x20\x2a\x20\x48\x54\x54\x50\x2f\x32\x2e\x30\x0d\x0a\x0d\x0a\x53\x4d\x0d\x0a\x0d\x0a"
+PREFACE_CODE = b"\x50\x52\x49\x20\x2a\x20\x48\x54\x54\x50\x2f\x32\x2e\x30\x0d\x0a\x0d\x0a\x53\x4d\x0d\x0a\x0d\x0a"
 
 
 class HTTPSocket:
@@ -56,15 +58,29 @@ class HTTPMainThread(Thread):
 
     def run(self):
 
+        is_http2 = False
+
         while True:
             read_msg = self.conn.recv(self.buf_size)
+
             if not len(read_msg) == 0:
-                print(read_msg)
+                print(':'.join(hex(x) for x in read_msg))
 
                 if read_msg == PREFACE_CODE:
                     print('check preface')
+                    setting_frame = SettingFrame(is_ack=True)
+                    settings_bin = setting_frame.get_frame_bin()
 
-                if read_msg[-4:] == b'\r\n\r\n':
+                    self.conn.write(settings_bin)
+
+                    is_http2 = True
+                elif is_http2:
+
+                    try:
+                        frame = Frame(read_msg)
+                    except:
+                        print('unknown type')
+                elif read_msg[-4:] == b'\r\n\r\n':
                     self.conn.write(b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\nHello World")
                     self.conn.close()
                     return
