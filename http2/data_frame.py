@@ -22,13 +22,54 @@ class DataFrame(Frame):
 
     PADDED_FLAG = 0x8
 
+    @classmethod
+    def load(cls, frame, header):
+
+        # frame length, type, flag, id
+        frm_len, frm_type, frm_flag, frm_id = header
+
+        if frm_id is 0x0:  # protocol error
+            raise ValueError("'frm_id must not be 0x0")
+
+        if frm_type is not FrameType.DATA:
+            raise Exception("frame is not type of DATA type")
+
+        end_stream = False
+
+        data_start_index = 9  # default is payload stat index
+        data_pad_length = 0
+
+        if frm_flag & DataFrame.END_STREAM_FLAG is not 0:
+            end_stream = True
+
+        # create header frame to return
+        data_frame = cls(frm_id, end_stream)
+
+        if frm_flag & DataFrame.PADDED_FLAG is not 0:  # if it is padded
+            data_pad_length = frame[data_start_index]
+            data_start_index += 1  # if padded, first byte is pad length
+
+        # create data block
+
+        data_end_index = 9 + frm_len - data_pad_length
+
+        # get header block
+
+        data_block = frame[data_start_index:data_end_index]
+        data_frame.data = data_block
+
+        return data_frame
+
     def __init__(self, id, end_stream=False):
 
-        self.is_end_header = end_stream
+        self._is_end_stream = end_stream
 
         self._is_padded = False
 
         Frame.__init__(self, type=FrameType.DATA, flag=0x0, id=id)
+
+    def set_text(self, text, encoding='iso-8859-1'):
+        self._data = text.encode(encoding)
 
     def get_frame_bin(self):
 
@@ -53,10 +94,10 @@ class DataFrame(Frame):
     def flag(self):
         flag = 0x0
 
-        if self.is_end_stream:
+        if self._is_end_stream:
             flag |= DataFrame.END_STREAM_FLAG
 
-        if self.is_padded:
+        if self._is_padded:
             flag |= DataFrame.PADDED_FLAG
 
         return flag
