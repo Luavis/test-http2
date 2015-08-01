@@ -62,7 +62,7 @@ class Frame(object):
         return (frame_len, frame_type, frame_flag, frame_id)
 
     @classmethod
-    def load(cls, frame, header=None):
+    def load(cls, frame, header=None, *args):
 
         from http2.setting_frame import SettingFrame
         from http2.data_frame import DataFrame
@@ -90,7 +90,7 @@ class Frame(object):
         else:
             raise Exception("Unknown frame type")
 
-        return frm_cls.load(frame, header)
+        return frm_cls.load(frame, header, *args)
 
     def __init__(self, type=FrameType.DATA, flag=0, id=0, data=bytearray()):
 
