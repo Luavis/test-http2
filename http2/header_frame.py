@@ -148,45 +148,53 @@ class HeaderFrame(Frame):
 
         self._header_list.append((name.lower(), value))
 
-    def status(self, status=None):
-        if status is not None:
-            self.add(':status', status)
-        else:
-            for header in self._header_list:
-                if header[0] == ':status':
+    def get(self, name):
+
+        for header in self._header_list:
+                if header[0] == name:
                     return header[1]
 
-    def method(self, method=None):
-        if method is not None:
-            self.add(':method', method)
-        else:
-            for header in self._header_list:
-                if header[0] == ':method':
-                    return header[1]
+        return None
 
-    def scheme(self, scheme=None):
-        if scheme is not None:
-            self.add(':scheme', scheme)
-        else:
-            for header in self._header_list:
-                if header[0] == ':scheme':
-                    return header[1]
+    @property
+    def status(self):
+        return self.get(':status')
 
-    def authority(self, authority=None):
-        if authority is not None:
-            self.add(':authority', authority)
-        else:
-            for header in self._header_list:
-                if header[0] == ':authority':
-                    return header[1]
+    @status.setter
+    def status(self, value):
+        self.add(':status', value)
 
-    def path(self, path=None):
-        if path is not None:
-            self.add(':path', path)
-        else:
-            for header in self._header_list:
-                if header[0] == ':path':
-                    return header[1]
+    @property
+    def method(self):
+        return self.get(':method')
+
+    @method.setter
+    def method(self, value):
+        self.add(':method', value)
+
+    @property
+    def scheme(self):
+        return self.get(':scheme')
+
+    @scheme.setter
+    def scheme(self, value):
+        self.add(':scheme', value)
+
+    @property
+    def authority(self):
+        return self.get(':authority')
+
+    @authority.setter
+    def authority(self, value):
+        self.add(':authority', value)
+
+    @property
+    def path(self):
+        return self.get(':path')
+
+    @path.setter
+    def path(self, value):
+        self.add(':path', value)
 
     # Remove headers
 
