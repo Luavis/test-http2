@@ -117,6 +117,15 @@ class HeaderFrame(Frame):
 
         Frame.__init__(self, type=FrameType.HEADERS, flag=0x0, id=id, data=None)
 
+    def __repr__(self):
+
+        repr = ""
+
+        for header in self._header_list:
+            repr += str(header[0]) + ' :' + str(header[1]) + '\n'
+
+        return repr
+
     def get_frame_bin(self):
 
         # Encode header
