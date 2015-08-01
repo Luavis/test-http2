@@ -9,6 +9,8 @@ from threading import Thread
 import ssl
 from http2.setting_frame import SettingFrame
 from http2.frame import Frame
+from http2.header_frame import HeaderFrame
+from http2.data_frame import DataFrame
 
 PREFACE_CODE = b"\x50\x52\x49\x20\x2a\x20\x48\x54\x54\x50\x2f\x32\x2e\x30\x0d\x0a\x0d\x0a\x53\x4d\x0d\x0a\x0d\x0a"
 
@@ -61,10 +63,13 @@ class HTTPMainThread(Thread):
         is_http2 = False
 
         while True:
-            read_msg = self.conn.recv(self.buf_size)
+            try:
+                read_msg = self.conn.recv(self.buf_size)
+            except:
+                continue
 
             if not len(read_msg) == 0:
-                print(':'.join(hex(x) for x in read_msg))
+                print(read_msg)
 
                 if read_msg == PREFACE_CODE:
                     print('check preface')
@@ -77,7 +82,29 @@ class HTTPMainThread(Thread):
                 elif is_http2:
 
                     try:
-                        frame = Frame(read_msg)
+                        frame = Frame.load(read_msg)
+                        if isinstance(frame, HeaderFrame):
+                            if frame.path == '/':
+                                content = u'<h1>Hello World</h1><hr><p>It working in HTT server(HTTP/2)</p>'.encode()
+                                # send header
+                                response_header = HeaderFrame(id=0x1)
+                                response_header.status = '200'
+                                response_header.authority = 'localhost'
+                                response_header.add('content-type', 'text/html')
+                                response_header.add('content-length', str(len(content)))
+                                header_bin = response_header.get_frame_bin()
+
+                                print('send header : ', header_bin)
+                                self.conn.write(header_bin)
+
+                                # send data
+
+                                data_frame = DataFrame(id=0x1, end_stream=True)
+                                data_frame.data = content
+                                data_bin = data_frame.get_frame_bin()
+
+                                print('send data : ', data_bin)
+                                self.conn.write(data_bin)
                     except:
                         print('unknown type')
                 elif read_msg[-4:] == b'\r\n\r\n':
