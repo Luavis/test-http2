@@ -15,7 +15,7 @@
 
 from http2.frame import (Frame, FrameType)
 from http2.util import int_to_bytes
-from http2.hpack.hpack import Encoder
+from http2.hpack.hpack import (Encoder, Decoder)
 
 
 class HeaderFrame(Frame):
@@ -32,7 +32,76 @@ class HeaderFrame(Frame):
 
     PRIORITY_FLAG = 0x20
 
-    def __init__(self, id, end_header=False, end_stream=False):
+    @classmethod
+    def load(cls, frame, header, encoded_headers=[]):
+
+        # frame length, type, flag, id
+        frm_len, frm_type, frm_flag, frm_id = header
+
+        if frm_id is 0x0:  # protocol error
+            raise ValueError("'frm_id must not be 0x0")
+
+        if frm_type is not FrameType.HEADERS:
+            raise Exception("frame is not type of HEADERS type")
+
+        end_stream = False
+        end_header = False
+
+        header_start_index = 9  # default is payload stat index
+        header_pad_length = 0
+
+        if frm_flag & HeaderFrame.END_STREAM_FLAG is not 0:
+            end_stream = True
+
+        if frm_flag & HeaderFrame.END_HEADER_FLAG is not 0:
+            end_header = True
+
+        # create header frame to return
+        header_frame = cls(frm_id, end_header, end_stream)
+
+        if frm_flag & HeaderFrame.PADDED_FLAG is not 0:  # if it is padded
+            header_pad_length = frame[header_start_index]
+            header_start_index += 1  # if padded, first byte is pad length
+
+        if frm_flag & HeaderFrame.PRIORITY_FLAG is not 0:  # if priority is set
+            dep_stream_id = frame[header_start_index] << 24
+            dep_stream_id += frame[header_start_index + 1] << 16
+            dep_stream_id += frame[header_start_index + 2] << 8
+            dep_stream_id += frame[header_start_index + 3]
+
+            weight = frame[header_start_index + 4]
+
+            header_frame.priority(dep_stream_id, weight)
+
+            header_start_index += 5  # if priority set, pass 5 byte(stream id, weight)
+
+        # create header block
+
+        header_end_index = 9 + frm_len - header_pad_length
+
+        # get header block fragment
+
+        header_block_frag = frame[header_start_index:header_end_index]
+
+        if end_header:
+            header_buffer = bytearray()
+
+            for encoded_header in encoded_headers:
+                if encoded_header.is_encoded:
+                    header_buffer += encoded_header._encoded_data
+                else:
+                    raise ValueError("encoded header didn't encoded")
+
+            decoder = Decoder()
+            header_buffer += header_block_frag
+
+            header_frame._header_list = decoder.decode(header_buffer)
+        else:
+            header_frame._encoded_data = header_block_frag
+
+        return header_frame
+
+    def __init__(self, id, end_header=True, end_stream=False):
 
         self.is_end_stream = end_header
 
@@ -43,6 +112,8 @@ class HeaderFrame(Frame):
         self._is_padded = False
 
         self._header_list = []  # http header list
+
+        self._encoded_data = None
 
         Frame.__init__(self, type=FrameType.HEADERS, flag=0x0, id=id, data=None)
 
@@ -121,6 +192,10 @@ class HeaderFrame(Frame):
             flag |= HeaderFrame.PRIORITY_FLAG
 
         return flag
+
+    @property
+    def is_encoded(self):
+        return self._encoded_data is not None
 
     def padding(self, pad_len):
 
