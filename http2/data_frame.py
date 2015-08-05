@@ -23,7 +23,7 @@ class DataFrame(Frame):
     PADDED_FLAG = 0x8
 
     @classmethod
-    def load(cls, frame, header):
+    def load(cls, frame, header, **kargs):
 
         # frame length, type, flag, id
         frm_len, frm_type, frm_flag, frm_id = header

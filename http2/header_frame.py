@@ -33,7 +33,7 @@ class HeaderFrame(Frame):
     PRIORITY_FLAG = 0x20
 
     @classmethod
-    def load(cls, frame, header, encoded_headers=[]):
+    def load(cls, frame, header, encoded_headers=[], decoder=Decoder()):
 
         # frame length, type, flag, id
         frm_len, frm_type, frm_flag, frm_id = header
@@ -57,7 +57,7 @@ class HeaderFrame(Frame):
             end_header = True
 
         # create header frame to return
-        header_frame = cls(frm_id, end_header, end_stream)
+        header_frame = cls(frm_id, [], end_header, end_stream)
 
         if frm_flag & HeaderFrame.PADDED_FLAG is not 0:  # if it is padded
             header_pad_length = frame[header_start_index]
@@ -82,6 +82,7 @@ class HeaderFrame(Frame):
         # get header block fragment
 
         header_block_frag = frame[header_start_index:header_end_index]
+        header_frame._data = header_block_frag
 
         if end_header:
             header_buffer = bytearray()
@@ -92,7 +93,6 @@ class HeaderFrame(Frame):
                 else:
                     raise ValueError("encoded header didn't encoded")
 
-            decoder = Decoder()
             header_buffer += header_block_frag
 
             header_frame._header_list = decoder.decode(header_buffer)
@@ -101,7 +101,7 @@ class HeaderFrame(Frame):
 
         return header_frame
 
-    def __init__(self, id, end_header=True, end_stream=False):
+    def __init__(self, id, header_list=[], end_header=True, end_stream=False):
 
         self.is_end_stream = end_stream
 
@@ -111,7 +111,7 @@ class HeaderFrame(Frame):
 
         self._is_padded = False
 
-        self._header_list = []  # http header list
+        self._header_list = header_list  # http header list
 
         self._encoded_data = None
 
@@ -164,6 +164,9 @@ class HeaderFrame(Frame):
                     return header[1]
 
         return None
+
+    def get_all(self):
+        return self._header_list
 
     @property
     def status(self):

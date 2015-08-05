@@ -31,7 +31,7 @@ class SettingFrame(Frame):
     SETTINGS_RANGE = range(1, 7)  # range from 1 to 6
 
     @classmethod
-    def load(cls, frame, header):
+    def load(cls, frame, header, **kargs):
 
         # frame length, type, flag, id
         frm_len, frm_type, frm_flag, frm_id = header

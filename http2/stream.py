@@ -36,13 +36,9 @@
        ES: END_STREAM flag
        R:  RST_STREAM frame
 """
-
-from frame import (Frame, FrameType)
-from http import (HTTPMessage, Status)
-from hpack.hpack import Encoder
-
-import math
-import random
+from http2.frame import Frame
+from http2.header_frame import HeaderFrame
+from http2.data_frame import DataFrame
 
 
 class StreamState(object):
@@ -66,89 +62,108 @@ class Stream(object):
 
     CRLF = '\r\n'
 
-    @classmethod
-    def _create_stream_id(cls):  # TODO: make random to do not duplicate in one connection
-        return int(math.floor(random.random() * 10000))
+    def __init__(self, connection, wfile, stream_id=0x0):
 
-    def __init__(self, conn_control=False):
+        self.state = StreamState.IDLE
 
-        self._state = StreamState.IDLE
-
-        if conn_control:  # If connection control stream make it 0x0
-            self._stream_id = 0x0
-        else:
-            self._stream_id = Stream._create_stream_id()
-
-        self._msg = None
+        # If connection control stream id must 0x0
+        self.connection = connection
+        self._stream_id = stream_id
+        self._wfile = wfile
+        self._client_headers = []
+        self._server_headers = []
+        self._last_header_raw = bytearray(0)  # empty header raw
 
     @property
-    def state(self):
-        return self._state
-
-    @property
-    def stream_id(self):
+    def id(self):
         return self._stream_id
 
     @property
-    def msg(self):
-        return self._msg
+    def is_connection_stream(self):
+        return self._stream_id == 0x0
 
-    def send_http_msg(self, msg):  # general situation
-        if not isinstance(msg, HTTPMessage):
-            raise ValueError('`msg` must be instance of HTTPMessage')
+    @property
+    def client_headers(self):
+        return self._client_headers
 
-        self._msg = msg
+    @property
+    def server_headers(self):
+        return self._server_headers
 
-        # TODO : get client socket and send it
+    @property
+    def method(self):
 
-        return self._send_headers()
+        if self._client_headers:
+            for header in self._client_headers:
+                if header[0] == ':method':
+                    return header[1]
 
-    def _get_header_buf(self):
+        else:  # stream didn't end
+            return None
 
-        encoder = Encoder()
-        header_list = []
+        return 'GET'  # default method
 
-        # add status
+    @property
+    def path(self):
 
-        if self._msg.status.type == Status.REQ:
-            header_list.append((':method', self._msg.status.method))
-            header_list.append((':scheme', 'http'))
-            header_list.append((':authority', 'localhost'))
-            header_list.append((':path', self._msg.status.path))
+        if self._client_headers:
+            for header in self._client_headers:
+                if header[0] == ':path':
+                    return header[1]
 
-        if self.msg.headers is not None:
+        else:  # stream didn't end
+            return None
 
-            for (h_name, header) in self.msg.headers.items():
-                header_list.append((h_name, header.value))
+        return '/'  # default path
 
-        header_buf = encoder.encode(header_list)
+    @property
+    def is_closed(self):
+        return self.state == StreamState.CLOSED
 
-        return header_buf
+    def receive_frame(self, frame_header, frame_raw):
 
-    def _send_headers(self):
+        try:
+            frame = Frame.load(frame_raw, frame_header, decoder=self.connection.decoder)
 
-        stream_payload = bytearray()
+            if isinstance(frame, HeaderFrame):
+                self._last_header_raw = frame.data  # get payload of frame raw
+                print(self._last_header_raw)
+                self._client_headers = frame.get_all()
+            if isinstance(frame, DataFrame):
+                pass  # TODO : Not impl
+            else:
+                pass
 
-        header_buf = self._get_header_buf()
+            if hasattr(frame, 'is_end_stream') and frame.is_end_stream:  # if frame can end stream
+                self.close()
 
-        frame = Frame()
-        frame.type = FrameType.HEADERS
-        frame.id = self.stream_id
-        frame.flag = 0x05
+        except Exception as e:  # TODO : if unknown frame send protocol error
+            print('unknown header')
+            print(e)
 
-        pad_len = 0
+            return False
 
-        header_buf_len = len(header_buf)
+        return True
 
-        if header_buf_len < Frame.FRAME_MIN_SIZE:  # Padding without HEADERS frame header
-            pad_len = Frame.FRAME_MIN_SIZE - header_buf_len
-            header_buf += bytearray(pad_len)  # padding empty data
-            header_buf_len = Frame.FRAME_MIN_SIZE
+    def send_header(self, headers, end_stream=False):  # TODO : if header block is bigger than stream size make it sep
 
-        stream_payload += header_buf
+        self._server_headers = headers
+        header_frame = HeaderFrame(id=self._stream_id, header_list=headers, end_stream=end_stream)
 
-        # TODO : get client socket and send it
+        header_bin = header_frame.get_frame_bin()
+        print(header_bin)
+        self._wfile.write(header_bin)
 
-        frame.data = stream_payload
+    def send_data(self, data, end_stream=False):
 
-        return frame.get_frame_bin()
+        data_frame = DataFrame(id=self._stream_id, end_stream=end_stream)
+        data_frame.data = data
+
+        data_bin = data_frame.get_frame_bin()
+
+        print(data_bin)
+
+        self._wfile.write(data_bin)
+
+    def close(self):
+        self.state = StreamState.CLOSED

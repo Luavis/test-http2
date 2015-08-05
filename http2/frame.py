@@ -34,11 +34,10 @@ class FrameType(object):
 
     CONTINUATION = 0x9
 
+DEFAULT_FRAME_MAX_SIZE = 16384
+
 
 class Frame(object):
-
-    FRAME_MIN_SIZE = 0
-    FRAME_MAX_SIZE = 16384
 
     @classmethod
     def parse_header(cls, frame_header):
@@ -62,7 +61,7 @@ class Frame(object):
         return (frame_len, frame_type, frame_flag, frame_id)
 
     @classmethod
-    def load(cls, frame, header=None, *args):
+    def load(cls, frame, header=None, **kargs):
 
         from http2.setting_frame import SettingFrame
         from http2.data_frame import DataFrame
@@ -90,19 +89,19 @@ class Frame(object):
         else:
             raise Exception("Unknown frame type")
 
-        return frm_cls.load(frame, header, *args)
+        return frm_cls.load(frame, header, **kargs)
 
-    def __init__(self, type=FrameType.DATA, flag=0, id=0, data=bytearray()):
+    def __init__(self, type=FrameType.DATA, flag=0, id=0, data=bytearray(), frame_max_size=DEFAULT_FRAME_MAX_SIZE):
 
         self._type = type
         self._flag = flag
         self._id_bin = id
 
-        self.max_size = Frame.FRAME_MAX_SIZE
+        self.max_size = frame_max_size
 
         # pass if  data is None; for lazy set data
 
-        if data is not None and len(data) > Frame.FRAME_MAX_SIZE:
+        if data is not None and len(data) > self.max_size:
             raise Exception('Data is out of size')
 
         self._data = data
@@ -113,8 +112,7 @@ class Frame(object):
 
     @data.setter
     def data(self, value):
-        if len(value) > Frame.FRAME_MAX_SIZE or \
-                len(value) < Frame.FRAME_MIN_SIZE:
+        if len(value) > self.max_size:
             raise Exception('Data size is invalid size')
         else:
             self._data = value
@@ -170,9 +168,6 @@ class Frame(object):
     def _append_length_bin(self, ret_bin):
 
         len_bin = len(self._data)
-
-        if len_bin < Frame.FRAME_MIN_SIZE:
-            raise Exception("Data size is invalid size")
 
         ret_bin.append((len_bin & 0xFF0000) >> 16)
 

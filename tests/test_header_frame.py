@@ -39,6 +39,15 @@ def test_header_frame_data():
     assert read_frame.get('accept') == "text/html"
 
 
+def test_chrom_refresh_frame_data():
+
+    frame_data = b'\x00\x00\x1e\x01%\x00\x00\x00\x07\x00\x00\x00\x00\xb6\xc7\x82\x00\x84\xb9X\xd3?\x89bQ\xf71\x0fR\xe6!\xff\x87\xbf\xc5\xc4\xc2\xbe\xc0'
+
+    frame = Frame.load(frame_data)
+
+    print(frame)
+
+
 def test_multiple_header_frame_data():
 
     encoded_frames = []
