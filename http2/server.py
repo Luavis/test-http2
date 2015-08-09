@@ -9,7 +9,7 @@ try:
 except:
     from BaseHTTPServer import (BaseHTTPRequestHandler, HTTPServer)
 
-from http2.setting_frame import SettingFrame
+from http2.frame.setting_frame import SettingFrame
 from http2.connection import Connection
 from http2.frame import Frame
 import traceback
@@ -84,6 +84,8 @@ class BaseHTTP2RequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(settings_bin)
 
             self.http2_connection = Connection(self)
+        else:
+            self.request_version = ''
 
         if self.request_version == 'HTTP/2.0':
             try:

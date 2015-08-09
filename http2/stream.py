@@ -37,8 +37,8 @@
        R:  RST_STREAM frame
 """
 from http2.frame import Frame
-from http2.header_frame import HeaderFrame
-from http2.data_frame import DataFrame
+from http2.frame.header_frame import HeaderFrame
+from http2.frame.data_frame import DataFrame
 
 
 class StreamState(object):
