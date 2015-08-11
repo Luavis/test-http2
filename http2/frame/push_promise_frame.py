@@ -2,10 +2,8 @@
     +---------------+
     |Pad Length? (8)|
     +-+-------------+-----------------------------------------------+
-    |E|                 Stream Dependency? (31)                   |
-    +-+-------------+-----------------------------------------------+
-    |  Weight? (8)  |
-    +-+-------------+-----------------------------------------------+
+    |R|                  Promised Stream ID (31)                    |
+    +-+-----------------------------+-------------------------------+
     |                   Header Block Fragment (*)                 ...
     +---------------------------------------------------------------+
     |                           Padding (*)                       ...
@@ -18,19 +16,15 @@ from http2.util import int_to_bytes
 from http2.hpack.hpack import (Encoder, Decoder)
 
 
-class HeaderFrame(Frame):
+class PushPromiseFrame(Frame):
 
     PAD_MAX_LENGTH = 255
 
     # HEADERS frame flags
 
-    END_STREAM_FLAG = 0x1
-
     END_HEADER_FLAG = 0x4
 
     PADDED_FLAG = 0x8
-
-    PRIORITY_FLAG = 0x20
 
     @classmethod
     def load(cls, frame, header, encoded_headers=[], decoder=Decoder()):
@@ -41,39 +35,30 @@ class HeaderFrame(Frame):
         if frm_id is 0x0:  # protocol error
             raise ValueError("'frm_id must not be 0x0")
 
-        if frm_type is not FrameType.HEADERS:
-            raise Exception("frame is not type of HEADERS type")
+        if frm_type is not FrameType.PUSH_PROMISE:
+            raise Exception("frame is not type of PUSH_PROMISE type")
 
-        end_stream = False
         end_header = False
 
         header_start_index = 9  # default is payload stat index
         header_pad_length = 0
 
-        if frm_flag & HeaderFrame.END_STREAM_FLAG is not 0:
-            end_stream = True
-
-        if frm_flag & HeaderFrame.END_HEADER_FLAG is not 0:
+        if frm_flag & PushPromiseFrame.END_HEADER_FLAG is not 0:
             end_header = True
 
         # create header frame to return
-        header_frame = cls(frm_id, [], end_header, end_stream)
+        header_frame = cls(frm_id, [], end_header)
 
-        if frm_flag & HeaderFrame.PADDED_FLAG is not 0:  # if it is padded
+        if frm_flag & PushPromiseFrame.PADDED_FLAG is not 0:  # if it is padded
             header_pad_length = frame[header_start_index]
             header_start_index += 1  # if padded, first byte is pad length
 
-        if frm_flag & HeaderFrame.PRIORITY_FLAG is not 0:  # if priority is set
-            dep_stream_id = frame[header_start_index] << 24
-            dep_stream_id += frame[header_start_index + 1] << 16
-            dep_stream_id += frame[header_start_index + 2] << 8
-            dep_stream_id += frame[header_start_index + 3]
+        # get promise stream id
 
-            weight = frame[header_start_index + 4]
-
-            header_frame.priority(dep_stream_id, weight)
-
-            header_start_index += 5  # if priority set, pass 5 byte(stream id, weight)
+        promised_stream_id = frame[header_start_index] << 24
+        promised_stream_id += frame[header_start_index + 1] << 16
+        promised_stream_id += frame[header_start_index + 2] << 8
+        promised_stream_id += frame[header_start_index + 3]
 
         # create header block
 
@@ -101,9 +86,7 @@ class HeaderFrame(Frame):
 
         return header_frame
 
-    def __init__(self, id, header_list=[], end_header=True, end_stream=False):
-
-        self.is_end_stream = end_stream
+    def __init__(self, id, header_list=[], end_header=True):
 
         self.is_end_header = end_header
 
@@ -115,7 +98,9 @@ class HeaderFrame(Frame):
 
         self._encoded_data = None
 
-        Frame.__init__(self, type=FrameType.HEADERS, flag=0x0, id=id, data=None)
+        self.promised_stream_id = 0x0  # default
+
+        Frame.__init__(self, type=FrameType.PUSH_PROMISE, flag=0x0, id=id, data=None)
 
     def __repr__(self):
 
@@ -135,6 +120,7 @@ class HeaderFrame(Frame):
         headers_frame_field = bytearray()
 
         if self._data is None:  # if user didn't touch data
+            print('promise header', self._header_list)
             self._data = encoder.encode(self._header_list)  # encode header list
 
         self._flag = self.flag  # get flag by method
@@ -145,11 +131,11 @@ class HeaderFrame(Frame):
 
             self._data += bytearray(self._pad_len)  # append pad byte in pad length
 
-        if self._is_priority:
-            headers_frame_field += int_to_bytes(self._dependency_id, 4)  # append dependency stream id
-            headers_frame_field.append(self._weight)
+        headers_frame_field += int_to_bytes(self.promised_stream_id, 4)  # append promised stream id
 
         self._data = headers_frame_field + self._data  # append HEADERS field
+
+        print('push promise data', Frame.get_frame_bin(self))
 
         return Frame.get_frame_bin(self)
 
@@ -221,16 +207,10 @@ class HeaderFrame(Frame):
         flag = 0x0
 
         if self.is_end_header:
-            flag |= HeaderFrame.END_HEADER_FLAG
-
-        if self.is_end_stream:
-            flag |= HeaderFrame.END_STREAM_FLAG
+            flag |= PushPromiseFrame.END_HEADER_FLAG
 
         if self._is_padded:
-            flag |= HeaderFrame.PADDED_FLAG
-
-        if self._is_priority:
-            flag |= HeaderFrame.PRIORITY_FLAG
+            flag |= PushPromiseFrame.PADDED_FLAG
 
         return flag
 
@@ -240,17 +220,9 @@ class HeaderFrame(Frame):
 
     def padding(self, pad_len):
 
-        if pad_len > HeaderFrame.PAD_MAX_LENGTH:  # padding length error
+        if pad_len > PushPromiseFrame.PAD_MAX_LENGTH:  # padding length error
             raise ValueError("pad_len is greater then pad max length")
 
-        self._flag |= HeaderFrame.PADDED_FLAG  # flag padded
+        self._flag |= PushPromiseFrame.PADDED_FLAG  # flag padded
         self._is_padded = True
         self._pad_len = pad_len
-
-    def priority(self, dep_stream_id, weight):
-
-        self._is_priority = True
-
-        self._dependency_id = dep_stream_id
-
-        self._weight = weight  # set priority weight

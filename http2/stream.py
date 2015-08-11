@@ -39,6 +39,7 @@
 from http2.frame import Frame
 from http2.frame.header_frame import HeaderFrame
 from http2.frame.data_frame import DataFrame
+from http2.frame.push_promise_frame import PushPromiseFrame
 
 
 class StreamState(object):
@@ -150,20 +151,33 @@ class Stream(object):
         self._server_headers = headers
         header_frame = HeaderFrame(id=self._stream_id, header_list=headers, end_stream=end_stream)
 
-        header_bin = header_frame.get_frame_bin()
-        print(header_bin)
-        self._wfile.write(header_bin)
+        self.send_frame(header_frame)
 
     def send_data(self, data, end_stream=False):
 
         data_frame = DataFrame(id=self._stream_id, end_stream=end_stream)
         data_frame.data = data
 
-        data_bin = data_frame.get_frame_bin()
+        self.send_frame(data_frame)
 
-        print(data_bin)
+    def promise(self, promise_headers=[]):
 
-        self._wfile.write(data_bin)
+        # TODO: end headers when it can contain all headers in PP Frame
+
+        promise = PushPromiseFrame(self.id, promise_headers, end_header=True)
+        print('push promise stream id', self.id)
+
+        push_stream = self.connection.create_stream()
+
+        promise.promised_stream_id = push_stream.id
+
+        self.send_frame(promise)  # send push promise
+
+        return push_stream
+
+    def send_frame(self, frame):
+        frame_bin = frame.get_frame_bin()
+        self._wfile.write(frame_bin)
 
     def close(self):
         self.state = StreamState.CLOSED

@@ -1,7 +1,7 @@
 """
 
     HTTP server
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    ~~~~~~~~~~
 
 """
 try:
@@ -12,7 +12,7 @@ except:
 from http2.frame.setting_frame import SettingFrame
 from http2.connection import Connection
 from http2.frame import Frame
-import traceback
+import traceback  # for debug
 
 __version__ = "0.1"
 
@@ -40,6 +40,9 @@ class BaseHTTP2RequestHandler(BaseHTTPRequestHandler):
             frame_header = Frame.parse_header(self.raw_requestdata)
             frm_len, frm_type, frm_flag, frm_id = frame_header
 
+            while frm_len + 9 > len(self.raw_requestdata):
+                self.raw_requestdata += self.connection.read(HTTP2_BUFFER_SIZE)
+
             stream = self.http2_connection.get_stream(frm_id)
             stream.receive_frame(frame_header, self.raw_requestdata)
 
@@ -50,8 +53,11 @@ class BaseHTTP2RequestHandler(BaseHTTPRequestHandler):
                 self.headers = stream._client_headers
                 # self.request_version = 'HTTP/2.0' always
                 self.requestline = stream.method + ' ' + stream.path + ' HTTP/2.0'  # virtual request line
+                self.path = stream.path
                 self.command = stream.method
                 self.response_stream = stream
+
+                self.stream = stream
 
                 return True  # handle one request
 
@@ -99,8 +105,10 @@ class BaseHTTP2RequestHandler(BaseHTTPRequestHandler):
                         self.requestline = ''
                         self.command = ''
                         self.response_stream = None
-            except:
-                pass  # end
+            except Exception as e:
+                print('error')
+                print(traceback.format_exc())
+                print(e)
         else:
             self.handle_one_request()
 
@@ -144,12 +152,19 @@ class BaseHTTP2RequestHandler(BaseHTTPRequestHandler):
         if self.request_version <= 'HTTP/1.1':
             BaseHTTPRequestHandler.flush_headers(self)
         elif self.request_version == 'HTTP/2.0':
-            print(self._headers_buffer)
             self.response_stream.send_header(self._headers_buffer)
             self._headers_buffer = []
 
+    def push(self, method='GET', path='', req_headers=[], res_headers=[], res_data=''):
+        if self.request_version <= 'HTTP/1.1':
+            return
+        elif self.request_version == 'HTTP/2.0':
+            req_headers.append((':method', method))
+            req_headers.append((':path', path))
+
+            self.http2_connection.push(req_headers, res_headers, res_data)
+
     def send_data(self, data):
-        print('send data')
         if self.request_version <= 'HTTP/1.1':
             self.wfile.write(data)
         elif self.request_version == 'HTTP/2.0':

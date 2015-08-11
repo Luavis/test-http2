@@ -1,10 +1,44 @@
+var fs = require('fs');
+var path = require('path');
+var http2 = require('http2');
 
-var options = {plain: true}
+// We cache one file to be able to do simple performance tests without waiting for the disk
+var cachedFile = fs.readFileSync(path.join(__dirname, './server.js'));
+var cachedUrl = '/server.js';
 
-require("http2")
-    .raw
-    .createServer(options,
-    function(res, req){
-      req.end("Hello World")
-    }).listen(8080)
+// The callback to handle requests
+function onRequest(request, response) {
+  var filename = path.join(__dirname, request.url);
 
+  // Serving server.js from cache. Useful for microbenchmarks.
+  if (request.url === cachedUrl) {
+    if (response.push) {
+      // Also push down the client js, since it's possible if the requester wants
+      // one, they want both.
+
+      var push = response.push('/client.js');
+      push.writeHead(200);
+      fs.createReadStream(path.join(__dirname, '/client.js')).pipe(push);
+    }
+    response.end(cachedFile);
+  }
+
+  // Reading file from disk if it exists and is safe.
+  else if ((filename.indexOf(__dirname) === 0) && fs.existsSync(filename) && fs.statSync(filename).isFile()) {
+    response.writeHead(200);
+
+    fs.createReadStream(filename).pipe(response);
+  }
+
+  // Otherwise responding with 404.
+  else {
+    response.writeHead(404);
+    response.end();
+  }
+}
+
+var server;
+
+server = http2.raw.createServer(onRequest);
+
+server.listen(process.env.HTTP2_PORT || 8080);

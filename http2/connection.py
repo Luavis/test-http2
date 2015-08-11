@@ -1,5 +1,6 @@
 
 from http2.frame import DEFAULT_FRAME_MAX_SIZE
+from http2.frame.push_promise_frame import PushPromiseFrame
 from http2.stream import Stream
 from http2.hpack.hpack import (Decoder, Encoder)
 
@@ -22,6 +23,8 @@ class Connection(object):
         self.decoder = Decoder()
         self.encoder = Encoder()
 
+        self.stream_list[0] = Stream(self, self._request_handler.wfile, 0)  # setting stream
+
     def create_stream(self):  # when server create stream
         stream = Stream(self, self._request_handler.wfile, Connection._create_stream_id())
 
@@ -35,15 +38,35 @@ class Connection(object):
         if stream is not None:
             pass  # if closed stream raise exception
         else:
-            if stream_id % 2 is 0 and stream_id is not 0:  # even = server stream
+            if stream_id % 2 is 0:  # even = server stream
                 stream = self.create_stream()
             else:  # odd = client stream
                 stream = self.created_stream(stream_id)
 
         return stream
 
-    # TODO : when there is too many streams, restrict to create it
+    def push(self, req_headers=[], res_headers=[], res_data=bytearray()):
 
+        # TODO: end headers when it can contain all headers in PP Frame
+        promise_stream = self.create_stream()
+
+        promise = PushPromiseFrame(promise_stream.id, req_headers, end_header=True)
+        print('push promise stream id', promise_stream.id)
+
+        push_stream = self.create_stream()
+
+        promise.promised_stream_id = push_stream.id
+
+        promise_stream.send_frame(promise)  # send push promise
+
+        print('push stream id', push_stream.id)
+
+        # TODO: end headers when it can contain all headers in PP Frame
+        push_stream.send_header(res_headers, end_stream=True)
+
+        push_stream.send_data(res_data)  # push
+
+    # TODO : when there is too many streams, restrict to create it
     def created_stream(self, stream_id):  # when client create stream
         if stream_id % 2 == 0:
             raise Exception('Client create even stream id')  # TODO : raise protocol error exception

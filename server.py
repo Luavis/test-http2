@@ -131,17 +131,75 @@ class EchoHTTPRequestHandler(BaseHTTP2RequestHandler):  # for test
     def do_GET(self):
         """Serve a GET request."""
 
-        msg = u'<h1>Hello World</h1><hr><p>It working in HTT server('.encode()
-        msg += self.request_version.encode()
-        msg += u')</p>'.encode()
+        print('path', self.path)
 
-        self.send_response(200)
-        self.send_header("Content-Length", len(msg))
-        self.send_header("Content-Type", 'text/html')
-        self.end_headers()
+        if self.path == '/':
+            push_req_headers = [(':authority', 'localhost:8000'),
+                                                (':scheme', 'https'),
+                                                (':method', 'GET'),
+                                                (':path', '/style.css')]
 
-        self.send_data(msg)
-        self.flush()
+            push_res_headers = [(':scheme', 'https')]
+
+            res_data = u'h1 {color: blue}'.encode()
+
+            push_res_headers.append((':status', '200'))
+            push_res_headers.append(("content-length", len(res_data)))
+            push_res_headers.append(("content-type", 'text/css'))
+            push_res_headers.append(('cache-control', 'public, max-age=3600'))
+
+            push_stream = self.stream.promise(promise_headers=push_req_headers)
+            push_stream.send_header(push_res_headers)
+
+            push_stream.send_data(res_data, end_stream=True)  # push
+            self.flush()
+
+            msg = u"""
+                <!doctype html>
+                <html>
+                <head>
+                    <link href="/style.css" rel="stylesheet">
+                </head>
+                <body>
+            """.encode()
+            msg += u'<h1>Hello World</h1><hr><p>It working in HTT server('.encode()
+            msg += self.request_version.encode()
+            msg += u')</p>'.encode()
+
+            msg += u"""
+                </body>
+                </html>
+            """.encode()
+
+            self.send_response(200)
+            self.send_header("Content-Length", len(msg))
+            self.send_header("Content-Type", 'text/html')
+            self.end_headers()
+
+            self.send_data(msg)
+            self.flush()
+
+        elif self.path == '/style.css':
+            print('style')
+            msg = u'h1 {color: red}'.encode()
+
+            self.send_response(200)
+            self.send_header("Content-Length", len(msg))
+            self.send_header("Content-Type", 'text/css')
+            self.end_headers()
+
+            self.send_data(msg)
+            self.flush()
+        else:
+            msg = u''.encode()
+
+            self.send_response(200)
+            self.send_header("Content-Length", len(msg))
+            self.send_header("Content-Type", 'text/html')
+            self.end_headers()
+
+            self.send_data(msg)
+            self.flush()
 
 
 def main():

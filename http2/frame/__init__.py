@@ -63,9 +63,10 @@ class Frame(object):
     @classmethod
     def load(cls, frame, header=None, **kargs):
 
-        from http2.setting_frame import SettingFrame
-        from http2.data_frame import DataFrame
-        from http2.header_frame import HeaderFrame
+        from http2.frame.setting_frame import SettingFrame
+        from http2.frame.data_frame import DataFrame
+        from http2.frame.header_frame import HeaderFrame
+        from http2.frame.push_promise_frame import PushPromiseFrame
 
         if header is None:
             header = cls.parse_header(frame)
@@ -86,6 +87,8 @@ class Frame(object):
             frm_cls = SettingFrame
         elif frm_type == FrameType.HEADERS:
             frm_cls = HeaderFrame
+        elif frm_type == FrameType.PUSH_PROMISE:
+            frm_cls = PushPromiseFrame
         else:
             raise Exception("Unknown frame type")
 
