@@ -9,6 +9,7 @@
 
 from http2.frame import (Frame, FrameType)
 from http2.util import int_to_bytes
+from http2.errors import ProtocolError
 
 
 class PriorityFrame(Frame):
@@ -20,10 +21,10 @@ class PriorityFrame(Frame):
         frm_len, frm_type, frm_flag, frm_id = header
 
         if frm_id is 0x0:  # protocol error
-            raise ValueError("'frm_id must not be 0x0")
+            raise ProtocolError("'frm_id must not be 0x0")
 
         if frm_type is not FrameType.PRIORITY:
-            raise Exception("frame is not type of PRIORITY type")
+            raise ValueError("frame is not type of PRIORITY type")
 
         start_index = 9  # default is payload stat index
 

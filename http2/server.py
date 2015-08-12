@@ -5,13 +5,16 @@
 
 """
 try:
+    from socketserver import ThreadingMixIn
     from http.server import (BaseHTTPRequestHandler, HTTPServer)
-except:
+except ImportError:
+    from SocketServer import ThreadingMixIn
     from BaseHTTPServer import (BaseHTTPRequestHandler, HTTPServer)
 
 from http2.frame.setting_frame import SettingFrame
 from http2.connection import Connection
 from http2.frame import Frame
+from http2.errors import HTTP2Error
 import traceback  # for debug
 
 __version__ = "0.1"
@@ -25,7 +28,7 @@ def _quote_html(html):
     return html.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-class HTTP2Server(HTTPServer):
+class HTTP2Server(ThreadingMixIn, HTTPServer):
     pass
 
 
@@ -33,49 +36,52 @@ class BaseHTTP2RequestHandler(BaseHTTPRequestHandler):
 
     server_version = "BaseHTTP2/" + __version__
 
+    def request_worker(self):
+        pass
+
     def parse_http2_request(self):
-        try:
-            self.raw_requestdata = self.connection.read(HTTP2_BUFFER_SIZE)
-            print(self.raw_requestdata)
-            frame_header = Frame.parse_header(self.raw_requestdata)
-            frm_len, frm_type, frm_flag, frm_id = frame_header
 
-            while frm_len + 9 > len(self.raw_requestdata):
-                self.raw_requestdata += self.connection.read(HTTP2_BUFFER_SIZE)
+        self.raw_requestdata = self.connection.read(9)
 
-            stream = self.http2_connection.get_stream(frm_id)
-            stream.receive_frame(frame_header, self.raw_requestdata)
+        frame_header = Frame.parse_header(self.raw_requestdata)
 
-            if stream.is_closed:
+        frm_len, frm_type, frm_flag, frm_id = frame_header
 
-                print('end stream id : ', stream.id, ' frm_id ', frm_id)
+        while frm_len + 9 > len(self.raw_requestdata):
+            self.raw_requestdata += self.connection.read(frm_len - len(self.raw_requestdata) + 9)  # read  left data
 
-                self.headers = stream._client_headers
-                # self.request_version = 'HTTP/2.0' always
-                self.requestline = stream.method + ' ' + stream.path + ' HTTP/2.0'  # virtual request line
-                self.path = stream.path
-                self.command = stream.method
-                self.response_stream = stream
+        stream = self.http2_connection.get_stream(frm_id)
+        stream.receive_frame(frame_header, self.raw_requestdata)
 
-                self.stream = stream
+        if stream.is_wait_for_res:
 
-                return True  # handle one request
+            print('end stream id : ', stream.id, ' frm_id ', frm_id)
 
-        except Exception as e:  # TODO : when parse error closed connection
-            print('error')
-            print(traceback.format_exc())
-            print(e)
+            self.headers = stream._client_headers
+            # self.request_version = 'HTTP/2.0' always
+            self.requestline = stream.method + ' ' + stream.path + ' HTTP/2.0'  # virtual request line
+            self.path = stream.path
+            self.command = stream.method
+            self.response_stream = stream
+
+            self.stream = stream
+
+            return True  # handle one request
 
         return False
 
     def handle(self):
         """Handle multiple requests if necessary."""
         self.close_connection = True
+        self.stream = None  # for compatibility
 
         # if request version not set check preface first
         preface = self.rfile.peek(PREFACE_SIZE)
 
-        if preface == PREFACE_CODE:  # check code
+        if preface[0:PREFACE_SIZE] == PREFACE_CODE:  # check code
+
+            preface = self.rfile.read(PREFACE_SIZE)  # read preface
+            print(preface)
 
             self.request_version = 'HTTP/2.0'
 
@@ -106,9 +112,20 @@ class BaseHTTP2RequestHandler(BaseHTTPRequestHandler):
                         self.command = ''
                         self.response_stream = None
             except Exception as e:
-                print('error')
-                print(traceback.format_exc())
-                print(e)
+                if isinstance(e, HTTP2Error):
+                    print('connection closed - with error : ' + repr(e))
+                    print('error')
+                    print(traceback.format_exc())
+                    print(e)
+
+                else:
+                    print('error')
+                    print(traceback.format_exc())
+                    print(e)
+                    raise e
+
+                self.close_connection = True
+                return
         else:
             self.handle_one_request()
 
@@ -155,14 +172,14 @@ class BaseHTTP2RequestHandler(BaseHTTPRequestHandler):
             self.response_stream.send_header(self._headers_buffer)
             self._headers_buffer = []
 
-    def push(self, method='GET', path='', req_headers=[], res_headers=[], res_data=''):
-        if self.request_version <= 'HTTP/1.1':
-            return
-        elif self.request_version == 'HTTP/2.0':
-            req_headers.append((':method', method))
-            req_headers.append((':path', path))
+    def push(self, stream=None, req_headers=[]):
+        if self.request_version == 'HTTP/2.0':
+            if stream is not None:
+                return self.stream.promise(promise_headers=req_headers)
+            else:
+                return self.http2_connection.promise(req_headers)
 
-            self.http2_connection.push(req_headers, res_headers, res_data)
+        return None
 
     def send_data(self, data):
         if self.request_version <= 'HTTP/1.1':

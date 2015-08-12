@@ -4,161 +4,85 @@
 
 """
 
-import http.server
 import ssl
 from http2.server import (BaseHTTP2RequestHandler, HTTP2Server)
-
-# import socket
-# from threading import Thread
-
-# from http2.setting_frame import SettingFrame
-# from http2.frame import Frame
-# from http2.header_frame import HeaderFrame
-# from http2.data_frame import DataFrame
-
-# PREFACE_CODE = b"\x50\x52\x49\x20\x2a\x20\x48\x54\x54\x50\x2f\x32\x2e\x30\x0d\x0a\x0d\x0a\x53\x4d\x0d\x0a\x0d\x0a"
-
-
-# class HTTPSocket:
-
-#     def __init__(self):
-#         self.listensock = None
-
-#     def bind(self, port):
-
-#         self.listensock = socket.socket()
-
-#         self.listensock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-#         self.listensock.bind(('localhost', port))
-#         # self.listensock.settimeout(10 * 1000)
-
-#         self.listensock.listen(5)
-
-#     def accept(self):
-#         conn, addr = self.listensock.accept()
-#         return conn, addr
-
-
-# class HTTPMainThread(Thread):
-
-#     # default max header size is 64KB, default max content size 2MB
-
-#     def __init__(self, conn, buf_size, user_ip='', user_port=0, max_header_size=640000, max_content_size=2000000):
-
-#         Thread.__init__(self)
-
-#         self.buf_size = buf_size
-
-#         self.conn = conn
-
-#         self.last_msg_char = ''
-
-#         self.user_ip = user_ip
-
-#         self.user_port = user_port
-
-#         self.max_header_size = max_header_size
-
-#         self.max_content_size = max_content_size
-
-#     def run(self):
-
-#         is_http2 = False
-
-#         while True:
-# try:
-#     read_msg = self.conn.recv(self.buf_size)
-# except:
-#     continue
-
-#             if not len(read_msg) == 0:
-#                 print(read_msg)
-
-#                 if read_msg == PREFACE_CODE:
-#                     print('check preface')
-#                     setting_frame = SettingFrame(is_ack=True)
-#                     settings_bin = setting_frame.get_frame_bin()
-
-#                     self.conn.write(settings_bin)
-
-#                     is_http2 = True
-#                 elif is_http2:
-
-#                     try:
-#                         frame = Frame.load(read_msg)
-
-#                         if isinstance(frame, HeaderFrame):
-
-#                             print(frame)
-
-#                             if frame.path == '/':
-#                                 content = u'<h1>Hello World</h1><hr><p>It working in HTT server(HTTP/2)</p>'.encode()
-
-#                                 # send header
-#                                 response_header = HeaderFrame(id=0x1)
-#                                 response_header.status = '200'
-#                                 response_header.authority = 'localhost'
-#                                 response_header.add('content-type', 'text/html')
-#                                 response_header.add('content-length', str(len(content)))
-#                                 header_bin = response_header.get_frame_bin()
-
-#                                 self.conn.write(header_bin)
-
-#                                 # send data
-
-#                                 data_frame = DataFrame(id=0x1, end_stream=True)
-#                                 data_frame.data = content
-#                                 data_bin = data_frame.get_frame_bin()
-
-#                                 self.conn.write(data_bin)
-#                     except:
-#                         print('unknown type')
-#                 elif read_msg[-4:] == b'\r\n\r\n':
-#                     self.conn.write(b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\nHello World")
-#                     self.conn.close()
-#                     return
-#             else:
-#                 break
-
-#         self.conn.close()  # close it now
 
 PORT = 8000
 
 
 class EchoHTTPRequestHandler(BaseHTTP2RequestHandler):  # for test
 
+    def do_POST(self):
+        """Serve a POST request."""
+
+        if self.path == '/upload':
+            import io
+            reader = io.BufferedReader(self.stream.req_stream_io)
+
+            msg = reader.read(1024)
+            print('msg ', msg)
+
+            self.send_response(200)
+            self.send_header("Content-Length", len(msg))
+            self.send_header("Content-Type", 'text/html')
+            self.end_headers()
+
+            self.send_data(msg)
+            self.flush()
+
     def do_GET(self):
         """Serve a GET request."""
 
-        print('path', self.path)
-
         if self.path == '/':
+
             push_req_headers = [(':authority', 'localhost:8000'),
                                                 (':scheme', 'https'),
                                                 (':method', 'GET'),
                                                 (':path', '/style.css')]
 
-            push_res_headers = [(':scheme', 'https')]
+            push_stream = self.push(self.stream, push_req_headers)
+            if push_stream:
+                push_res_headers = [(':scheme', 'https')]
 
-            res_data = u'h1 {color: blue}'.encode()
+                res_data = u'h1 {color: blue}'.encode()
 
-            push_res_headers.append((':status', '200'))
-            push_res_headers.append(("content-length", len(res_data)))
-            push_res_headers.append(("content-type", 'text/css'))
-            push_res_headers.append(('cache-control', 'public, max-age=3600'))
+                push_res_headers.append((':status', '200'))
+                push_res_headers.append(("content-length", len(res_data)))
+                push_res_headers.append(("content-type", 'text/css'))
+                push_res_headers.append(('cache-control', 'public, max-age=3600'))
 
-            push_stream = self.stream.promise(promise_headers=push_req_headers)
-            push_stream.send_header(push_res_headers)
+                push_stream.send_header(push_res_headers)
 
-            push_stream.send_data(res_data, end_stream=True)  # push
-            self.flush()
+                push_stream.send_data(res_data, end_stream=True)  # push
+                self.flush()
+
+            push_req_headers = [(':authority', 'localhost:8000'),
+                                                (':scheme', 'https'),
+                                                (':method', 'GET'),
+                                                (':path', '/script.js')]
+
+            push_stream = self.push(self.stream, push_req_headers)
+            if push_stream:
+                push_res_headers = [(':scheme', 'https')]
+
+                res_data = u'alert("Hello World")'.encode()
+
+                push_res_headers.append((':status', '200'))
+                push_res_headers.append(("content-length", len(res_data)))
+                push_res_headers.append(("content-type", 'text/javascript'))
+                push_res_headers.append(('cache-control', 'public, max-age=3600'))
+
+                push_stream.send_header(push_res_headers)
+
+                push_stream.send_data(res_data, end_stream=True)  # push
+                self.flush()
 
             msg = u"""
                 <!doctype html>
                 <html>
                 <head>
                     <link href="/style.css" rel="stylesheet">
+                    <script src="/script.js"></script>
                 </head>
                 <body>
             """.encode()
@@ -178,7 +102,6 @@ class EchoHTTPRequestHandler(BaseHTTP2RequestHandler):  # for test
 
             self.send_data(msg)
             self.flush()
-
         elif self.path == '/style.css':
             print('style')
             msg = u'h1 {color: red}'.encode()

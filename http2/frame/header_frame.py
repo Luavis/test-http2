@@ -16,6 +16,7 @@
 from http2.frame import (Frame, FrameType)
 from http2.util import int_to_bytes
 from http2.hpack.hpack import (Encoder, Decoder)
+from http2.errors import ProtocolError
 
 
 class HeaderFrame(Frame):
@@ -39,10 +40,10 @@ class HeaderFrame(Frame):
         frm_len, frm_type, frm_flag, frm_id = header
 
         if frm_id is 0x0:  # protocol error
-            raise ValueError("'frm_id must not be 0x0")
+            raise ProtocolError()
 
         if frm_type is not FrameType.HEADERS:
-            raise Exception("frame is not type of HEADERS type")
+            raise ValueError("frame is not type of HEADERS type")
 
         end_stream = False
         end_header = False
@@ -91,7 +92,7 @@ class HeaderFrame(Frame):
                 if encoded_header.is_encoded:
                     header_buffer += encoded_header._encoded_data
                 else:
-                    raise ValueError("encoded header didn't encoded")
+                    raise ProtocolError('header frame error')
 
             header_buffer += header_block_frag
 

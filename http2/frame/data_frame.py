@@ -10,6 +10,7 @@
 """
 
 from http2.frame import (Frame, FrameType)
+from http2.errors import ProtocolError
 
 
 class DataFrame(Frame):
@@ -29,10 +30,10 @@ class DataFrame(Frame):
         frm_len, frm_type, frm_flag, frm_id = header
 
         if frm_id is 0x0:  # protocol error
-            raise ValueError("'frm_id must not be 0x0")
+            raise ProtocolError()
 
         if frm_type is not FrameType.DATA:
-            raise Exception("frame is not type of DATA type")
+            raise ValueError("frame is not type of DATA type")
 
         end_stream = False
 
@@ -62,7 +63,7 @@ class DataFrame(Frame):
 
     def __init__(self, id, end_stream=False):
 
-        self._is_end_stream = end_stream
+        self.is_end_stream = end_stream
 
         self._is_padded = False
 
@@ -94,7 +95,7 @@ class DataFrame(Frame):
     def flag(self):
         flag = 0x0
 
-        if self._is_end_stream:
+        if self.is_end_stream:
             flag |= DataFrame.END_STREAM_FLAG
 
         if self._is_padded:

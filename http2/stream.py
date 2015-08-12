@@ -40,6 +40,12 @@ from http2.frame import Frame
 from http2.frame.header_frame import HeaderFrame
 from http2.frame.data_frame import DataFrame
 from http2.frame.push_promise_frame import PushPromiseFrame
+from http2.frame.rst_frame import RSTFrame
+from http2.frame.priority_frame import PriorityFrame
+from http2.data_frame_io import DataFrameIO
+
+from http2.errors import ProtocolError
+from time import time
 
 
 class StreamState(object):
@@ -67,13 +73,15 @@ class Stream(object):
 
         self.state = StreamState.IDLE
 
-        # If connection control stream id must 0x0
+        # If8 connection control stream id must 0x0
         self.connection = connection
         self._stream_id = stream_id
         self._wfile = wfile
         self._client_headers = []
         self._server_headers = []
         self._last_header_raw = bytearray(0)  # empty header raw
+        self.is_end_header = False
+        self.req_stream_io = DataFrameIO()
 
     @property
     def id(self):
@@ -121,6 +129,11 @@ class Stream(object):
     def is_closed(self):
         return self.state == StreamState.CLOSED
 
+    @property
+    def is_wait_for_res(self):
+        # self.is_end_header
+        return self.state == StreamState.HALF_CLOSED_REMOTE
+
     def receive_frame(self, frame_header, frame_raw):
 
         try:
@@ -128,20 +141,46 @@ class Stream(object):
 
             if isinstance(frame, HeaderFrame):
                 self._last_header_raw = frame.data  # get payload of frame raw
-                print(self._last_header_raw)
                 self._client_headers = frame.get_all()
-            if isinstance(frame, DataFrame):
-                pass  # TODO : Not impl
-            else:
-                pass
+                self.state = StreamState.OPEN  # if header recv, open stream
 
-            if hasattr(frame, 'is_end_stream') and frame.is_end_stream:  # if frame can end stream
+                if frame.is_end_header:
+                    self.is_end_header = frame.is_end_header
+                print('is_end_stream ', frame.is_end_stream)
+            elif isinstance(frame, DataFrame):
+                # TODO : need test
+                self.req_stream_io.write(frame.data)
+                print('is_end_stream ', frame.is_end_stream)
+
+            else:
+                # ignore unknow frame
+                return False
+
+            if not isinstance(frame, PriorityFrame):  # priority frame always be able to recieved
+
+                if self.state == StreamState.HALF_CLOSED_REMOTE:
+                    if not(isinstance(frame.RSTFrame)):  # or TODO: WINDOW_UPDATE
+                        raise ProtocolError()
+                elif self.state == StreamState.CLOSED:
+                    if not(isinstance(frame.RSTFrame)):  # or TODO: WINDOW_UPDATE
+                        raise ProtocolError()
+                    elif time() - self._closed_time > 1:  # if these streams are recv after 1 sec
+                        raise ProtocolError()
+
+            if hasattr(frame, 'is_end_stream') and frame.is_end_stream:  # stream that can change state
+
+                if self.state == StreamState.HALF_CLOSED_LOCAL:
+                    self.close()
+                elif self.state == StreamState.OPEN:
+                    self.state = StreamState.HALF_CLOSED_REMOTE
+                else:  # it would not be occured
+                    raise ProtocolError()
+
+            if isinstance(frame, RSTFrame):
                 self.close()
 
-        except Exception as e:  # TODO : if unknown frame send protocol error
-            print('unknown header')
-            print(e)
-
+        except:
+            raise ProtocolError()  # unknow exception occur protocol error
             return False
 
         return True
@@ -165,7 +204,6 @@ class Stream(object):
         # TODO: end headers when it can contain all headers in PP Frame
 
         promise = PushPromiseFrame(self.id, promise_headers, end_header=True)
-        print('push promise stream id', self.id)
 
         push_stream = self.connection.create_stream()
 
@@ -177,7 +215,9 @@ class Stream(object):
 
     def send_frame(self, frame):
         frame_bin = frame.get_frame_bin()
+
         self._wfile.write(frame_bin)
 
     def close(self):
         self.state = StreamState.CLOSED
+        self._closed_time = time()

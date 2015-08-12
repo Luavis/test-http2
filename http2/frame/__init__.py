@@ -10,6 +10,7 @@
  +---------------------------------------------------------------+
 
 """
+from http2.errors import ProtocolError, FrameSizeError
 
 
 class FrameType(object):
@@ -43,7 +44,7 @@ class Frame(object):
     def parse_header(cls, frame_header):
 
         if len(frame_header) < 9:
-            raise ValueError("invalid frame_header length")
+            raise ProtocolError()  # invalid frame
 
         frame_len = frame_header[0] << 16
         frame_len += frame_header[1] << 8
@@ -79,7 +80,7 @@ class Frame(object):
         # check frame length match real size
 
         if not frm_len + 9 == len(frame):
-            raise ValueError('frame size is not match')
+            raise FrameSizeError()
 
         if frm_type == FrameType.DATA:
             frm_cls = DataFrame
@@ -90,7 +91,7 @@ class Frame(object):
         elif frm_type == FrameType.PUSH_PROMISE:
             frm_cls = PushPromiseFrame
         else:
-            raise Exception("Unknown frame type")
+            return None
 
         return frm_cls.load(frame, header, **kargs)
 
@@ -105,7 +106,7 @@ class Frame(object):
         # pass if  data is None; for lazy set data
 
         if data is not None and len(data) > self.max_size:
-            raise Exception('Data is out of size')
+            raise FrameSizeError()
 
         self._data = data
 
@@ -116,7 +117,7 @@ class Frame(object):
     @data.setter
     def data(self, value):
         if len(value) > self.max_size:
-            raise Exception('Data size is invalid size')
+            raise ValueError('Data size is invalid size')
         else:
             self._data = value
 
@@ -127,7 +128,7 @@ class Frame(object):
     @type.setter
     def type(self, value):
         if value > 0xFF:
-            raise Exception('Type is out of size')
+            raise ValueError('Type is out of size')
         else:
             self._type = value
 
@@ -142,7 +143,7 @@ class Frame(object):
     @id.setter
     def id(self, value):
         if value > 0xFFFFFFFF or not(value & 0x7FFFFFFF == value):
-            raise Exception('ID is invalid')
+            raise ValueError('ID is invalid')
         else:
             self._id_bin = value
 

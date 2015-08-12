@@ -8,7 +8,7 @@
 """
 
 from http2.frame import (Frame, FrameType)
-
+from http2.errors import ProtocolError
 
 class SettingFrame(Frame):
 
@@ -37,13 +37,13 @@ class SettingFrame(Frame):
         frm_len, frm_type, frm_flag, frm_id = header
 
         if frm_id is not 0x0:  # protocol error
-            raise ValueError("'frm_id must be 0x0")
+            raise ProtocolError("'frm_id must be 0x0")
 
         if frm_type is not FrameType.SETTINGS:
-            raise Exception("frame is not type of SETTINGS type")
+            raise ValueError("frame is not type of SETTINGS type")
 
         if frm_flag == SettingFrame.ACK_FLAG and frm_len is not 0:  # protocol error
-            raise ValueError("Frame is ACK frame but frame length is not 0")
+            raise ProtocolError("Frame is ACK frame but frame length is not 0")
 
         setting_frame = cls()
 
@@ -71,9 +71,7 @@ class SettingFrame(Frame):
 
                     index += 6  # read 6 byte more for next reading
             except IndexError:
-                raise ValueError("frame payload is out of format")
-            except Exception:
-                raise Exception("Unknown Error")
+                raise ProtocolError("frame payload is out of format")
 
         return setting_frame
 

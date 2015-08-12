@@ -14,6 +14,7 @@
 from http2.frame import (Frame, FrameType)
 from http2.util import int_to_bytes
 from http2.hpack.hpack import (Encoder, Decoder)
+from http2.errors import ProtocolError
 
 
 class PushPromiseFrame(Frame):
@@ -33,10 +34,10 @@ class PushPromiseFrame(Frame):
         frm_len, frm_type, frm_flag, frm_id = header
 
         if frm_id is 0x0:  # protocol error
-            raise ValueError("'frm_id must not be 0x0")
+            raise ProtocolError("'frm_id must not be 0x0")
 
         if frm_type is not FrameType.PUSH_PROMISE:
-            raise Exception("frame is not type of PUSH_PROMISE type")
+            raise ValueError("frame is not type of PUSH_PROMISE type")
 
         end_header = False
 
@@ -120,7 +121,6 @@ class PushPromiseFrame(Frame):
         headers_frame_field = bytearray()
 
         if self._data is None:  # if user didn't touch data
-            print('promise header', self._header_list)
             self._data = encoder.encode(self._header_list)  # encode header list
 
         self._flag = self.flag  # get flag by method
